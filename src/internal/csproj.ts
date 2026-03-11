@@ -13,6 +13,7 @@ import {
 } from "./utils"
 
 const RE_SELF_CLOSING_TAG = /\/>$/gm
+const PATH_SEPS = ["\\\\", "/"]
 
 /**
  * An MSBuild project.
@@ -27,6 +28,10 @@ export class Csproj {
 	 */
 	readonly uri: Uri
 	/**
+	 * The path segment separator in use.
+	 */
+	readonly sep: string
+	/**
 	 * The XML document.
 	 */
 	private readonly xml: CheerioAPI
@@ -38,23 +43,25 @@ export class Csproj {
 	/**
 	 * Parses a project on disk.
 	 * @param uri The URI of the project.
+	 * @param [sep=path.sep] The path segment separator. If not specified, path.sep is used.
 	 * @returns The project.
 	 */
-	static async open(uri: Uri): Promise<Csproj> {
+	static async open(uri: Uri, sep: string = path.sep): Promise<Csproj> {
 		const data = await workspace.fs.readFile(uri)
 		// According to NodeJS docs, this avoids an allocation.
 		// https://nodejs.org/api/buffer.html#static-method-bufferfromarraybuffer-byteoffset-length
 		const buf = Buffer.from(data.buffer)
 		const xml = loadBuffer(buf, { xml: true })
-		const csproj = new Csproj(uri, xml)
+		const csproj = new Csproj(uri, sep, xml)
 
 		return csproj
 	}
 
 	// NOTE: Constructor is necessary to satisfy readonly properties.
-	private constructor(uri: Uri, xml: CheerioAPI) {
+	private constructor(uri: Uri, sep: string, xml: CheerioAPI) {
 		this.name = path.basename(uri.fsPath)
 		this.uri = uri
+		this.sep = sep
 		this.xml = xml
 		this.indent = detectIndent(xml)
 	}
@@ -78,7 +85,7 @@ export class Csproj {
 		}
 
 		this.xml(`<${itemType}/>`)
-			.attr("Include", this.asRelativePath(uri))
+			.attr("Include", this.asRelativePath(uri).replace(path.sep, this.sep))
 			.appendTo(group)
 	}
 
@@ -88,9 +95,7 @@ export class Csproj {
 	 * @returns True if so, otherwise false.
 	 */
 	hasItem(uri: Uri): boolean {
-		const rel = this.asRelativePath(uri, true)
-
-		return this.xml(`ItemGroup > *[Include="${rel}"]`).length > 0
+		return this.xml(this.toSelector(uri)).length > 0
 	}
 
 	/**
@@ -99,10 +104,8 @@ export class Csproj {
 	 * @returns True if one or more items were removed, otherwise false.
 	 */
 	removeItem(uri: Uri): boolean {
-		const rel = this.asRelativePath(uri, true)
-
 		// Find all items with the file path.
-		const items = this.xml(`ItemGroup > *[Include="${rel}"]`)
+		const items = this.xml(this.toSelector(uri))
 		items.remove()
 
 		// Remove any empty ItemGroups.
@@ -169,14 +172,24 @@ export class Csproj {
 	}
 
 	/**
+	 * Formats a path into a CSS selector against the XML document.
+	 * @param uri The URI path.
+	 * @returns The CSS query.
+	 */
+	private toSelector(uri: Uri): string {
+		const parts = this.asRelativePath(uri).split(path.sep)
+
+		return PATH_SEPS.map(
+			(s) => `ItemGroup > *[Include="${parts.join(s)}"]`,
+		).join(",")
+	}
+
+	/**
 	 * Computes the path relative to the project directory.
 	 * @param uri The URI path.
-	 * @param isSelectorQuery Whether or not to use double backslashes instead of one, for use with `querySelector()`.
 	 * @returns The relative path.
 	 */
-	private asRelativePath(uri: Uri, isSelectorQuery: boolean = false): string {
-		const rel = path.relative(path.dirname(this.uri.fsPath), uri.fsPath)
-		// Always use windows-style seperators.
-		return rel.replaceAll(path.sep, isSelectorQuery ? "\\\\" : "\\")
+	private asRelativePath(uri: Uri): string {
+		return path.relative(path.dirname(this.uri.fsPath), uri.fsPath)
 	}
 }

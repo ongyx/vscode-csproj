@@ -62,6 +62,19 @@ const CSP_ITEMGROUP_AFTER = `<?xml version="1.0" encoding="utf-8"?>
 </Project>
 `
 
+const CSP_MIXED_SEP = `<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <ItemGroup>
+    <Compile Include="src/Test1.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <TypescriptCompile Include="src\\Test2.ts" />
+  </ItemGroup>
+</Project>
+`
+
+const PATH_SEP = "\\"
+
 describe("csproj.Csproj", () => {
 	let tfs: TempFs | undefined
 
@@ -81,7 +94,7 @@ describe("csproj.Csproj", () => {
 				...MOCK_FILES,
 			})
 
-			const csproj = await Csproj.open(tfs.absuri("Test.csproj"))
+			const csproj = await Csproj.open(tfs.absuri("Test.csproj"), PATH_SEP)
 
 			csproj.addItem("Compile", tfs.absuri("src/Test1.cs"))
 			csproj.addItem("TypescriptCompile", tfs.absuri("src/Test2.ts"))
@@ -99,11 +112,24 @@ describe("csproj.Csproj", () => {
 				...MOCK_FILES,
 			})
 
-			const csproj = await Csproj.open(tfs.absuri("Test.csproj"))
+			const csproj = await Csproj.open(tfs.absuri("Test.csproj"), PATH_SEP)
 
 			assert.ok(csproj.hasItem(tfs.absuri("src/Test1.cs")))
 			assert.ok(csproj.hasItem(tfs.absuri("src/Test2.ts")))
 			assert.ok(csproj.hasItem(tfs.absuri("src/Test3.html")))
+		})
+
+		it("should report that the project has an item with a non-native directory separator", async () => {
+			assert.ok(tfs)
+			await tfs.mock({
+				"Test.csproj": CSP_MIXED_SEP,
+				...MOCK_FILES,
+			})
+
+			const csproj = await Csproj.open(tfs.absuri("Test.csproj"), PATH_SEP)
+
+			assert.ok(csproj.hasItem(tfs.absuri("src/Test1.cs")))
+			assert.ok(csproj.hasItem(tfs.absuri("src/Test2.ts")))
 		})
 	})
 
@@ -115,7 +141,7 @@ describe("csproj.Csproj", () => {
 				...MOCK_FILES,
 			})
 
-			const csproj = await Csproj.open(tfs.absuri("Test.csproj"))
+			const csproj = await Csproj.open(tfs.absuri("Test.csproj"), PATH_SEP)
 
 			assert.ok(csproj.removeItem(tfs.absuri("src/Test1.cs")))
 			assert.ok(csproj.removeItem(tfs.absuri("src/Test2.ts")))
@@ -131,7 +157,7 @@ describe("csproj.Csproj", () => {
 				...MOCK_FILES,
 			})
 
-			const csproj = await Csproj.open(tfs.absuri("Test.csproj"))
+			const csproj = await Csproj.open(tfs.absuri("Test.csproj"), PATH_SEP)
 
 			assert.ok(csproj.removeItem(tfs.absuri("src/Test2.cs")))
 			assert.ok(csproj.removeItem(tfs.absuri("src/Test3.cs")))
@@ -146,7 +172,7 @@ describe("csproj.Csproj", () => {
 				...MOCK_FILES,
 			})
 
-			const csproj = await Csproj.open(tfs.absuri("Test.csproj"))
+			const csproj = await Csproj.open(tfs.absuri("Test.csproj"), PATH_SEP)
 
 			assert.ok(csproj.removeItem(tfs.absuri("src/Test1.cs")))
 
@@ -164,7 +190,7 @@ describe("csproj.Csproj", () => {
 
 			const identicalPath = tfs.absuri("TestIdentical.csproj")
 
-			const csproj = await Csproj.open(tfs.absuri("Test.csproj"))
+			const csproj = await Csproj.open(tfs.absuri("Test.csproj"), PATH_SEP)
 			await csproj.save(identicalPath)
 
 			const data = await fs.readFile(identicalPath.fsPath, "utf8")
